@@ -32,7 +32,9 @@ def load_config():
             # "image1": "https://via.placeholder.com/150x200?text=Perso+1",
             # "image2": "https://via.placeholder.com/150x200?text=Perso+2",
             "vote_cooldown": 300,  # 5 minutes default
-            "max_votes_per_user": 0  # 0 = unlimited
+            "max_votes_per_user": 0,  # 0 = unlimited
+            "voting_closed": False,
+            "winner": None
         }
         save_config(config)
         return config
@@ -46,7 +48,9 @@ def load_config():
             # "image1": "https://via.placeholder.com/150x200?text=Perso+1",
             # "image2": "https://via.placeholder.com/150x200?text=Perso+2",
             "vote_cooldown": 300,
-            "max_votes_per_user": 0
+            "max_votes_per_user": 0,
+            "voting_closed": False,
+            "winner": None
         }
         for k, v in defaults.items():
             config.setdefault(k, v)
@@ -89,6 +93,15 @@ def vote():
         return jsonify({"error": "Invalid id, must be 1 or 2"}), 400
 
     config = load_config()
+    # If voting is closed, reject vote
+    if config.get("voting_closed", False):
+        winner_name = config.get("char1") if config.get("winner") == 1 else config.get("char2") if config.get("winner") == 2 else "Inconnu"
+        return jsonify({
+            "error": f"Le vote est clôturé. Le vainqueur est : {winner_name}",
+            "voting_closed": True,
+            "winner": config.get("winner")
+        }), 429
+
     cooldown = config.get("vote_cooldown", 300)
     max_votes = config.get("max_votes_per_user", 0)
 
@@ -143,7 +156,7 @@ def set_config():
     # Load existing config to preserve missing fields
     current = load_config()
     # Update only provided fields
-    for key in ["title", "char1", "char2", "vote_cooldown", "max_votes_per_user"]:  # image1, image2 commented out
+    for key in ["title", "char1", "char2", "vote_cooldown", "max_votes_per_user", "voting_closed", "winner"]:
         if key in data:
             current[key] = data[key]
     save_config(current)
@@ -156,6 +169,11 @@ def reset_votes():
     # also clear IP data? maybe not, but could reset.
     # We'll keep IP data to prevent abuse across resets? Probably reset IP data too.
     save_ip_data({})
+    # Also reset voting_closed and winner?
+    config = load_config()
+    config["voting_closed"] = False
+    config["winner"] = None
+    save_config(config)
     return jsonify(votes)
 
 # Admin page
@@ -177,6 +195,8 @@ ADMIN_PAGE = """
         pre {background:#1a1a1a; padding:10px; border-radius:4px; overflow:auto;}
         .img-preview {max-width:150px; max-height:200px; margin-top:5px; border:1px solid #555;}
         .small {font-size:0.9em; color:#ccc;}
+        .radio-group {display:flex; gap:15px; margin-top:5px;}
+        .radio-group label {display:flex; align-items:center; gap:5px;}
     </style>
 </head>
 <body>
@@ -202,6 +222,21 @@ ADMIN_PAGE = """
             <div class="small">0 = aucun délai</div>
             <label for="max_votes_per_user">Nombre maximum de votes par utilisateur (0 = illimité) :</label>
             <input type="number" id="max_votes_per_user" name="max_votes_per_user" min="0" value="0">
+            <div class="small">0 = illimité</div>
+            <fieldset style="border:1px solid #ffd700; padding:10px; margin-top:10px;">
+                <legend>Clôturer le vote</legend>
+                <label>
+                    <input type="checkbox" id="closeVote" name="voting_closed">
+                    Clôturer le vote
+                </label><br>
+                <div id="winnerSelect" style="margin-top:10px; display:none;">
+                    <label>Vainqueur :</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="winner" value="1"> {{char1}}</label>
+                        <label><input type="radio" name="winner" value="2"> {{char2}}</label>
+                    </div>
+                </div>
+            </fieldset>
             <button type="submit">Sauvegarder la configuration</button>
         </form>
     </div>
@@ -233,11 +268,18 @@ ADMIN_PAGE = """
             // document.getElementById('image2').value = config.image2 || '';
             document.getElementById('vote_cooldown').value = config.vote_cooldown || '';
             document.getElementById('max_votes_per_user').value = config.max_votes_per_user || '';
-            // previews
-            // const preview1 = document.getElementById('preview1');
-            // const preview2 = document.getElementById('preview2');
-            // preview1.innerHTML = config.image1 ? `<img src="${config.image1}" class="img-preview" alt="Preview 1">` : '';
-            // preview2.innerHTML = config.image2 ? `<img src="${config.image2}" class="img-preview" alt="Preview 2">` : '';
+            document.getElementById('closeVote').checked = !!config.voting_closed;
+            const winnerSelect = document.getElementById('winnerSelect');
+            if (config.voting_closed) {
+                winnerSelect.style.display = 'block';
+                // set radio
+                const winnerRadios = document.getElementsByName('winner');
+                winnerRadios.forEach(r => {
+                    if (r.value == config.winner) r.checked = true;
+                });
+            } else {
+                winnerSelect.style.display = 'none';
+            }
             document.getElementById('state').textContent = JSON.stringify({config, votes}, null, 2);
         } catch (e) {
             document.getElementById('state').textContent = 'Erreur de chargement: ' + e;
@@ -254,6 +296,16 @@ ADMIN_PAGE = """
     //     const preview = document.getElementById('preview2');
     //     preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 2">` : '';
     // });
+    // Show winner select when checkbox toggled
+    document.getElementById('closeVote').addEventListener('change', e => {
+        const winnerSelect = document.getElementById('winnerSelect');
+        winnerSelect.style.display = e.target.checked ? 'block' : 'none';
+        if (!e.target.checked) {
+            // uncheck radios
+            const radios = document.getElementsByName('winner');
+            radios.forEach(r => r.checked = false);
+        }
+    });
     document.getElementById('configForm').addEventListener('submit', async e => {
         e.preventDefault();
         const title = document.getElementById('title').value.trim();
@@ -263,9 +315,23 @@ ADMIN_PAGE = """
         // const image2 = document.getElementById('image2').value.trim();
         const vote_cooldown = document.getElementById('vote_cooldown').value.trim();
         const max_votes_per_user = document.getElementById('max_votes_per_user').value.trim();
-        const payload = {title, char1, char2};  // image1, image2 removed
+        const voting_closed = document.getElementById('closeVote').checked;
+        const winnerRadios = document.getElementsByName('winner');
+        let winner = null;
+        if (voting_closed) {
+            winnerRadios.forEach(r => {
+                if (r.checked) winner = parseInt(r.value, 10);
+            });
+            if (winner === null) {
+                alert('Veuillez sélectionner un vainqueur lorsque le vote est clôturé.');
+                return;
+            }
+        }
+        const payload = {title, char1, char2};
         if (vote_cooldown !== '') payload.vote_cooldown = parseInt(vote_cooldown, 10);
         if (max_votes_per_user !== '') payload.max_votes_per_user = parseInt(max_votes_per_user, 10);
+        payload.voting_closed = voting_closed;
+        payload.winner = winner;
         try {
             const resp = await fetch(`${API}/config`, {
                 method: 'POST',
