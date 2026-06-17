@@ -3,5 +3,7 @@
   "char1": "Personnage 1",
   "char2": "Personnage 2",
   "image1": "https://via.placeholder.com/150x200?text=Perso+1",
-  "image2": "https://via.placeholder.com/150x200?text=Perso+2"
+  "image2": "https://via.placeholder.com/150x200?text=Perso+2",
+  "vote_cooldown": 300,
+  "max_votes_per_user": 0
 }

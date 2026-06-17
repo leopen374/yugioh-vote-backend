@@ -2,12 +2,14 @@ from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
 import json
 import os
+import time
 
 app = Flask(__name__)
 CORS(app)  # enable CORS for all routes
 
 VOTES_FILE = os.path.join(os.path.dirname(__file__), 'votes.json')
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+IP_DATA_FILE = os.path.join(os.path.dirname(__file__), 'ip_data.json')
 
 def load_votes():
     if not os.path.exists(VOTES_FILE):
@@ -28,16 +30,41 @@ def load_config():
             "char1": "Personnage 1",
             "char2": "Personnage 2",
             "image1": "https://via.placeholder.com/150x200?text=Perso+1",
-            "image2": "https://via.placeholder.com/150x200?text=Perso+2"
+            "image2": "https://via.placeholder.com/150x200?text=Perso+2",
+            "vote_cooldown": 300,  # 5 minutes default
+            "max_votes_per_user": 0  # 0 = unlimited
         }
         save_config(config)
         return config
     with open(CONFIG_FILE, 'r') as f:
-        return json.load(f)
+        config = json.load(f)
+        # ensure defaults for any missing keys
+        defaults = {
+            "title": "Quel personnage préférez-vous ?",
+            "char1": "Personnage 1",
+            "char2": "Personnage 2",
+            "image1": "https://via.placeholder.com/150x200?text=Perso+1",
+            "image2": "https://via.placeholder.com/150x200?text=Perso+2",
+            "vote_cooldown": 300,
+            "max_votes_per_user": 0
+        }
+        for k, v in defaults.items():
+            config.setdefault(k, v)
+        return config
 
 def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
+
+def load_ip_data():
+    if not os.path.exists(IP_DATA_FILE):
+        return {}
+    with open(IP_DATA_FILE, 'r') as f:
+        return json.load(f)
+
+def save_ip_data(data):
+    with open(IP_DATA_FILE, 'w') as f:
+        json.dump(data, f)
 
 @app.route('/')
 def index():
@@ -60,9 +87,47 @@ def vote():
         vid_str = "2"
     else:
         return jsonify({"error": "Invalid id, must be 1 or 2"}), 400
+
+    config = load_config()
+    cooldown = config.get("vote_cooldown", 300)
+    max_votes = config.get("max_votes_per_user", 0)
+
+    ip = request.remote_addr or 'unknown'
+    now = time.time()
+
+    ip_data = load_ip_data()
+    entry = ip_data.get(ip, {"last_vote": 0, "vote_count": 0})
+
+    # cooldown check
+    if entry["last_vote"] > 0:
+        elapsed = now - entry["last_vote"]
+        if elapsed < cooldown:
+            remaining = int(cooldown - elapsed)
+            return jsonify({
+                "error": f"Please wait {remaining} second(s) before voting again.",
+                "cooldown": cooldown,
+                "remaining": remaining
+            }), 429
+
+    # max votes check
+    if max_votes > 0 and entry["vote_count"] >= max_votes:
+        return jsonify({
+            "error": f"You have reached the maximum of {max_votes} votes.",
+            "max_votes": max_votes,
+            "vote_count": entry["vote_count"]
+        }), 429
+
+    # allowed: record vote
     votes = load_votes()
     votes[vid_str] = votes.get(vid_str, 0) + 1
     save_votes(votes)
+
+    # update ip data
+    entry["last_vote"] = now
+    entry["vote_count"] += 1
+    ip_data[ip] = entry
+    save_ip_data(ip_data)
+
     return jsonify(votes)
 
 @app.route('/config', methods=['GET'])
@@ -78,7 +143,7 @@ def set_config():
     # Load existing config to preserve missing fields
     current = load_config()
     # Update only provided fields
-    for key in ["title", "char1", "char2", "image1", "image2"]:
+    for key in ["title", "char1", "char2", "image1", "image2", "vote_cooldown", "max_votes_per_user"]:
         if key in data:
             current[key] = data[key]
     save_config(current)
@@ -88,6 +153,9 @@ def set_config():
 def reset_votes():
     votes = {"1": 0, "2": 0}
     save_votes(votes)
+    # also clear IP data? maybe not, but could reset.
+    # We'll keep IP data to prevent abuse across resets? Probably reset IP data too.
+    save_ip_data({})
     return jsonify(votes)
 
 # Admin page
@@ -108,6 +176,7 @@ ADMIN_PAGE = """
         .section {border:2px solid #ffd700; padding:15px; margin-top:20px; border-radius:8px;}
         pre {background:#1a1a1a; padding:10px; border-radius:4px; overflow:auto;}
         .img-preview {max-width:150px; max-height:200px; margin-top:5px; border:1px solid #555;}
+        .small {font-size:0.9em; color:#ccc;}
     </style>
 </head>
 <body>
@@ -128,6 +197,11 @@ ADMIN_PAGE = """
             <label for="image2">URL de l'image du personnage 2 :</label>
             <input type="url" id="image2" name="image2" required>
             <div id="preview2"></div>
+            <label for="vote_cooldown">Temps minimum entre deux votes (secondes) :</label>
+            <input type="number" id="vote_cooldown" name="vote_cooldown" min="0" value="300">
+            <div class="small">0 = aucun délai</div>
+            <label for="max_votes_per_user">Nombre maximum de votes par utilisateur (0 = illimité) :</label>
+            <input type="number" id="max_votes_per_user" name="max_votes_per_user" min="0" value="0">
             <button type="submit">Sauvegarder la configuration</button>
         </form>
     </div>
@@ -157,6 +231,8 @@ ADMIN_PAGE = """
             document.getElementById('image1').value = config.image1 || '';
             document.getElementById('char2').value = config.char2 || '';
             document.getElementById('image2').value = config.image2 || '';
+            document.getElementById('vote_cooldown').value = config.vote_cooldown || '';
+            document.getElementById('max_votes_per_user').value = config.max_votes_per_user || '';
             // previews
             const preview1 = document.getElementById('preview1');
             const preview2 = document.getElementById('preview2');
@@ -185,11 +261,16 @@ ADMIN_PAGE = """
         const image1 = document.getElementById('image1').value.trim();
         const char2 = document.getElementById('char2').value.trim();
         const image2 = document.getElementById('image2').value.trim();
+        const vote_cooldown = document.getElementById('vote_cooldown').value.trim();
+        const max_votes_per_user = document.getElementById('max_votes_per_user').value.trim();
+        const payload = {title, char1, image1, char2, image2};
+        if (vote_cooldown !== '') payload.vote_cooldown = parseInt(vote_cooldown, 10);
+        if (max_votes_per_user !== '') payload.max_votes_per_user = parseInt(max_votes_per_user, 10);
         try {
             const resp = await fetch(`${API}/config`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title, char1, image1, char2, image2})
+                body: JSON.stringify(payload)
             });
             if (!resp.ok) throw new Error('Erreur serveur');
             alert('Configuration sauvegardée');
