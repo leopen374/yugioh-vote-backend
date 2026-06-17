@@ -177,8 +177,7 @@ def reset_votes():
     return jsonify(votes)
 
 # Admin page
-ADMIN_PAGE = """
-<!doctype html>
+ADMIN_PAGE = '''<!doctype html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -188,15 +187,15 @@ ADMIN_PAGE = """
         .container {max-width: 600px; margin:auto;}
         h1 {text-align:center;}
         label {display:block; margin-top:10px;}
-        input {width:100%; padding:8px; margin-top:5px;}
+        input, select {width:100%; padding:8px; margin-top:5px;}
         button {margin-top:15px; padding:10px 20px; background:#ffd700; color:#0d0d0d; border:none; cursor:pointer;}
         button:hover {background:#ffeb3b;}
         .section {border:2px solid #ffd700; padding:15px; margin-top:20px; border-radius:8px;}
         pre {background:#1a1a1a; padding:10px; border-radius:4px; overflow:auto;}
-        .img-preview {max-width:150px; max-height:200px; margin-top:5px; border:1px solid #555;}
         .small {font-size:0.9em; color:#ccc;}
-        .radio-group {display:flex; gap:15px; margin-top:5px;}
-        .radio-group label {display:flex; align-items:center; gap:5px;}
+        .status {margin-top:10px; padding:10px; background:#1a1a1a; border-radius:4px;}
+        .status.closed {color:#ffeb3b; border:1px solid #ffd700;}
+        .status.open {color:#aaa;}
     </style>
 </head>
 <body>
@@ -223,22 +222,18 @@ ADMIN_PAGE = """
             <label for="max_votes_per_user">Nombre maximum de votes par utilisateur (0 = illimité) :</label>
             <input type="number" id="max_votes_per_user" name="max_votes_per_user" min="0" value="0">
             <div class="small">0 = illimité</div>
-            <fieldset style="border:1px solid #ffd700; padding:10px; margin-top:10px;">
-                <legend>Clôturer le vote</legend>
-                <label>
-                    <input type="checkbox" id="closeVote" name="voting_closed">
-                    Clôturer le vote
-                </label><br>
-                <div id="winnerSelect" style="margin-top:10px; display:none;">
-                    <label>Vainqueur :</label>
-                    <div class="radio-group">
-                        <label><input type="radio" name="winner" value="1"> {{char1}}</label>
-                        <label><input type="radio" name="winner" value="2"> {{char2}}</label>
-                    </div>
-                </div>
-            </fieldset>
-            <button type="submit">Sauvegarder la configuration</button>
         </form>
+    </div>
+    <div class="section">
+        <h2>Clôturer le vote</h2>
+        <label for="winnerSelect">Sélectionner le vainqueur :</label>
+        <select id="winnerSelect">
+            <option value="1">-- Choix du personnage 1 --</option>
+            <option value="2">-- Choix du personnage 2 --</option>
+        </select>
+        <br>
+        <button id="closeVoteBtn">Clôturer le vote et déclarer le vainqueur</button>
+        <div id="closeStatus" class="status">Statut : vote ouvert</div>
     </div>
     <div class="section">
         <h2>Actions</h2>
@@ -252,6 +247,11 @@ ADMIN_PAGE = """
 </div>
 <script>
     const API = window.location.origin; // same origin as admin page
+    const winnerSelect = document.getElementById('winnerSelect');
+    const closeVoteBtn = document.getElementById('closeVoteBtn');
+    const closeStatus = document.getElementById('closeStatus');
+    const statePre = document.getElementById('state');
+    
     async function loadState() {
         try {
             const [configResp, votesResp] = await Promise.all([
@@ -263,75 +263,62 @@ ADMIN_PAGE = """
             // fill form
             document.getElementById('title').value = config.title || '';
             document.getElementById('char1').value = config.char1 || '';
-            // document.getElementById('image1').value = config.image1 || '';
             document.getElementById('char2').value = config.char2 || '';
-            // document.getElementById('image2').value = config.image2 || '';
             document.getElementById('vote_cooldown').value = config.vote_cooldown || '';
             document.getElementById('max_votes_per_user').value = config.max_votes_per_user || '';
-            document.getElementById('closeVote').checked = !!config.voting_closed;
-            const winnerSelect = document.getElementById('winnerSelect');
+            // populate winner select with actual names
+            winnerSelect.options[0].text = `${config.char1} (Personnage 1)`;
+            winnerSelect.options[1].text = `${config.char2} (Personnage 2)`;
+            // update status
             if (config.voting_closed) {
-                winnerSelect.style.display = 'block';
-                // set radio
-                const winnerRadios = document.getElementsByName('winner');
-                winnerRadios.forEach(r => {
-                    if (r.value == config.winner) r.checked = true;
-                });
+                const winnerName = config.winner === 1 ? config.char1 : config.winner === 2 ? config.char2 : 'Inconnu';
+                closeStatus.textContent = `Statut : vote clôturé – Vainqueur : ${winnerName}`;
+                closeStatus.className = 'status closed';
+                closeVoteBtn.disabled = true;
             } else {
-                winnerSelect.style.display = 'none';
+                closeStatus.textContent = `Statut : vote ouvert`;
+                closeStatus.className = 'status open';
+                closeVoteBtn.disabled = false;
             }
-            document.getElementById('state').textContent = JSON.stringify({config, votes}, null, 2);
+            statePre.textContent = JSON.stringify({config, votes}, null, 2);
         } catch (e) {
-            document.getElementById('state').textContent = 'Erreur de chargement: ' + e;
+            statePre.textContent = 'Erreur de chargement: ' + e;
         }
     }
-    // live preview
-    // document.getElementById('image1').addEventListener('input', e => {
-    //     const url = e.target.value.trim();
-    //     const preview = document.getElementById('preview1');
-    //     preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 1">` : '';
-    // });
-    // document.getElementById('image2').addEventListener('input', e => {
-    //     const url = e.target.value.trim();
-    //     const preview = document.getElementById('preview2');
-    //     preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 2">` : '';
-    // });
-    // Show winner select when checkbox toggled
-    document.getElementById('closeVote').addEventListener('change', e => {
-        const winnerSelect = document.getElementById('winnerSelect');
-        winnerSelect.style.display = e.target.checked ? 'block' : 'none';
-        if (!e.target.checked) {
-            // uncheck radios
-            const radios = document.getElementsByName('winner');
-            radios.forEach(r => r.checked = false);
+    
+    closeVoteBtn.addEventListener('click', async () => {
+        const winner = winnerSelect.value;
+        if (!winner) {
+            alert('Veuillez sélectionner un vainqueur.');
+            return;
+        }
+        if (!confirm(`Clôturer le vote et déclarer ${winnerSelect.options[winnerSelect.selectedIndex].text.split(' (')[0]} comme vainqueur ?`)) {
+            return;
+        }
+        try {
+            const resp = await fetch(`${API}/config`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({voting_closed: true, winner: parseInt(winner, 10)})
+            });
+            if (!resp.ok) throw new Error('Erreur serveur');
+            alert('Vote clôturé avec succès');
+            loadState();
+        } catch (err) {
+            alert('Erreur: ' + err);
         }
     });
+    
     document.getElementById('configForm').addEventListener('submit', async e => {
         e.preventDefault();
         const title = document.getElementById('title').value.trim();
         const char1 = document.getElementById('char1').value.trim();
-        // const image1 = document.getElementById('image1').value.trim();
         const char2 = document.getElementById('char2').value.trim();
-        // const image2 = document.getElementById('image2').value.trim();
         const vote_cooldown = document.getElementById('vote_cooldown').value.trim();
         const max_votes_per_user = document.getElementById('max_votes_per_user').value.trim();
-        const voting_closed = document.getElementById('closeVote').checked;
-        const winnerRadios = document.getElementsByName('winner');
-        let winner = null;
-        if (voting_closed) {
-            winnerRadios.forEach(r => {
-                if (r.checked) winner = parseInt(r.value, 10);
-            });
-            if (winner === null) {
-                alert('Veuillez sélectionner un vainqueur lorsque le vote est clôturé.');
-                return;
-            }
-        }
         const payload = {title, char1, char2};
         if (vote_cooldown !== '') payload.vote_cooldown = parseInt(vote_cooldown, 10);
         if (max_votes_per_user !== '') payload.max_votes_per_user = parseInt(max_votes_per_user, 10);
-        payload.voting_closed = voting_closed;
-        payload.winner = winner;
         try {
             const resp = await fetch(`${API}/config`, {
                 method: 'POST',
@@ -345,6 +332,7 @@ ADMIN_PAGE = """
             alert('Erreur: ' + err);
         }
     });
+    
     document.getElementById('resetBtn').addEventListener('click', async () => {
         if (!confirm('Réinitialiser les votes à zéro ?')) return;
         try {
@@ -356,6 +344,7 @@ ADMIN_PAGE = """
             alert('Erreur: ' + err);
         }
     });
+    
     document.getElementById('newVoteBtn').addEventListener('click', async () => {
         if (!confirm('Lancer un nouveau vote ? Cela réinitialisera les votes.')) return;
         try {
@@ -367,11 +356,11 @@ ADMIN_PAGE = """
             alert('Erreur: ' + err);
         }
     });
+    
     loadState();
 </script>
 </body>
-</html>
-"""
+</html>'''
 
 @app.route('/admin', methods=['GET'])
 def admin():
