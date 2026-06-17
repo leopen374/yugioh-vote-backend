@@ -1,5 +1,7 @@
 {
   "title": "Quel personnage préférez-vous ?",
   "char1": "Personnage 1",
-  "char2": "Personnage 2"
+  "char2": "Personnage 2",
+  "image1": "https://via.placeholder.com/150x200?text=Perso+1",
+  "image2": "https://via.placeholder.com/150x200?text=Perso+2"
 }

@@ -26,7 +26,9 @@ def load_config():
         config = {
             "title": "Quel personnage préférez-vous ?",
             "char1": "Personnage 1",
-            "char2": "Personnage 2"
+            "char2": "Personnage 2",
+            "image1": "https://via.placeholder.com/150x200?text=Perso+1",
+            "image2": "https://via.placeholder.com/150x200?text=Perso+2"
         }
         save_config(config)
         return config
@@ -73,15 +75,14 @@ def set_config():
     if not request.is_json:
         return jsonify({"error": "JSON required"}), 400
     data = request.get_json()
-    # Validate expected keys
-    title = data.get('title')
-    char1 = data.get('char1')
-    char2 = data.get('char2')
-    if title is None or char1 is None or char2 is None:
-        return jsonify({"error": "Missing title, char1, or char2"}), 400
-    config = {"title": title, "char1": char1, "char2": char2}
-    save_config(config)
-    return jsonify(config)
+    # Load existing config to preserve missing fields
+    current = load_config()
+    # Update only provided fields
+    for key in ["title", "char1", "char2", "image1", "image2"]:
+        if key in data:
+            current[key] = data[key]
+    save_config(current)
+    return jsonify(current)
 
 @app.route('/reset', methods=['POST'])
 def reset_votes():
@@ -106,6 +107,7 @@ ADMIN_PAGE = """
         button:hover {background:#ffeb3b;}
         .section {border:2px solid #ffd700; padding:15px; margin-top:20px; border-radius:8px;}
         pre {background:#1a1a1a; padding:10px; border-radius:4px; overflow:auto;}
+        .img-preview {max-width:150px; max-height:200px; margin-top:5px; border:1px solid #555;}
     </style>
 </head>
 <body>
@@ -118,8 +120,14 @@ ADMIN_PAGE = """
             <input type="text" id="title" name="title" required>
             <label for="char1">Nom du personnage 1 :</label>
             <input type="text" id="char1" name="char1" required>
+            <label for="image1">URL de l'image du personnage 1 :</label>
+            <input type="url" id="image1" name="image1" required>
+            <div id="preview1"></div>
             <label for="char2">Nom du personnage 2 :</label>
             <input type="text" id="char2" name="char2" required>
+            <label for="image2">URL de l'image du personnage 2 :</label>
+            <input type="url" id="image2" name="image2" required>
+            <div id="preview2"></div>
             <button type="submit">Sauvegarder la configuration</button>
         </form>
     </div>
@@ -143,24 +151,45 @@ ADMIN_PAGE = """
             ]);
             const config = await configResp.json();
             const votes = await votesResp.json();
+            // fill form
             document.getElementById('title').value = config.title || '';
             document.getElementById('char1').value = config.char1 || '';
+            document.getElementById('image1').value = config.image1 || '';
             document.getElementById('char2').value = config.char2 || '';
+            document.getElementById('image2').value = config.image2 || '';
+            // previews
+            const preview1 = document.getElementById('preview1');
+            const preview2 = document.getElementById('preview2');
+            preview1.innerHTML = config.image1 ? `<img src="${config.image1}" class="img-preview" alt="Preview 1">` : '';
+            preview2.innerHTML = config.image2 ? `<img src="${config.image2}" class="img-preview" alt="Preview 2">` : '';
             document.getElementById('state').textContent = JSON.stringify({config, votes}, null, 2);
         } catch (e) {
             document.getElementById('state').textContent = 'Erreur de chargement: ' + e;
         }
     }
+    // live preview
+    document.getElementById('image1').addEventListener('input', e => {
+        const url = e.target.value.trim();
+        const preview = document.getElementById('preview1');
+        preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 1">` : '';
+    });
+    document.getElementById('image2').addEventListener('input', e => {
+        const url = e.target.value.trim();
+        const preview = document.getElementById('preview2');
+        preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 2">` : '';
+    });
     document.getElementById('configForm').addEventListener('submit', async e => {
         e.preventDefault();
         const title = document.getElementById('title').value.trim();
         const char1 = document.getElementById('char1').value.trim();
+        const image1 = document.getElementById('image1').value.trim();
         const char2 = document.getElementById('char2').value.trim();
+        const image2 = document.getElementById('image2').value.trim();
         try {
             const resp = await fetch(`${API}/config`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({title, char1, char2})
+                body: JSON.stringify({title, char1, image1, char2, image2})
             });
             if (!resp.ok) throw new Error('Erreur serveur');
             alert('Configuration sauvegardée');
