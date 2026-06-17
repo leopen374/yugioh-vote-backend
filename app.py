@@ -29,8 +29,8 @@ def load_config():
             "title": "Quel personnage préférez-vous ?",
             "char1": "Personnage 1",
             "char2": "Personnage 2",
-            "image1": "https://via.placeholder.com/150x200?text=Perso+1",
-            "image2": "https://via.placeholder.com/150x200?text=Perso+2",
+            # "image1": "https://via.placeholder.com/150x200?text=Perso+1",
+            # "image2": "https://via.placeholder.com/150x200?text=Perso+2",
             "vote_cooldown": 300,  # 5 minutes default
             "max_votes_per_user": 0  # 0 = unlimited
         }
@@ -43,8 +43,8 @@ def load_config():
             "title": "Quel personnage préférez-vous ?",
             "char1": "Personnage 1",
             "char2": "Personnage 2",
-            "image1": "https://via.placeholder.com/150x200?text=Perso+1",
-            "image2": "https://via.placeholder.com/150x200?text=Perso+2",
+            # "image1": "https://via.placeholder.com/150x200?text=Perso+1",
+            # "image2": "https://via.placeholder.com/150x200?text=Perso+2",
             "vote_cooldown": 300,
             "max_votes_per_user": 0
         }
@@ -143,7 +143,7 @@ def set_config():
     # Load existing config to preserve missing fields
     current = load_config()
     # Update only provided fields
-    for key in ["title", "char1", "char2", "image1", "image2", "vote_cooldown", "max_votes_per_user"]:
+    for key in ["title", "char1", "char2", "vote_cooldown", "max_votes_per_user"]:  # image1, image2 commented out
         if key in data:
             current[key] = data[key]
     save_config(current)
@@ -189,14 +189,14 @@ ADMIN_PAGE = """
             <input type="text" id="title" name="title" required>
             <label for="char1">Nom du personnage 1 :</label>
             <input type="text" id="char1" name="char1" required>
-            <label for="image1">URL de l'image du personnage 1 :</label>
+            <!-- <label for="image1">URL de l'image du personnage 1 :</label>
             <input type="url" id="image1" name="image1" required>
-            <div id="preview1"></div>
+            <div id="preview1"></div> -->
             <label for="char2">Nom du personnage 2 :</label>
             <input type="text" id="char2" name="char2" required>
-            <label for="image2">URL de l'image du personnage 2 :</label>
+            <!-- <label for="image2">URL de l'image du personnage 2 :</label>
             <input type="url" id="image2" name="image2" required>
-            <div id="preview2"></div>
+            <div id="preview2"></div> -->
             <label for="vote_cooldown">Temps minimum entre deux votes (secondes) :</label>
             <input type="number" id="vote_cooldown" name="vote_cooldown" min="0" value="300">
             <div class="small">0 = aucun délai</div>
@@ -228,42 +228,42 @@ ADMIN_PAGE = """
             // fill form
             document.getElementById('title').value = config.title || '';
             document.getElementById('char1').value = config.char1 || '';
-            document.getElementById('image1').value = config.image1 || '';
+            // document.getElementById('image1').value = config.image1 || '';
             document.getElementById('char2').value = config.char2 || '';
-            document.getElementById('image2').value = config.image2 || '';
+            // document.getElementById('image2').value = config.image2 || '';
             document.getElementById('vote_cooldown').value = config.vote_cooldown || '';
             document.getElementById('max_votes_per_user').value = config.max_votes_per_user || '';
             // previews
-            const preview1 = document.getElementById('preview1');
-            const preview2 = document.getElementById('preview2');
-            preview1.innerHTML = config.image1 ? `<img src="${config.image1}" class="img-preview" alt="Preview 1">` : '';
-            preview2.innerHTML = config.image2 ? `<img src="${config.image2}" class="img-preview" alt="Preview 2">` : '';
+            // const preview1 = document.getElementById('preview1');
+            // const preview2 = document.getElementById('preview2');
+            // preview1.innerHTML = config.image1 ? `<img src="${config.image1}" class="img-preview" alt="Preview 1">` : '';
+            // preview2.innerHTML = config.image2 ? `<img src="${config.image2}" class="img-preview" alt="Preview 2">` : '';
             document.getElementById('state').textContent = JSON.stringify({config, votes}, null, 2);
         } catch (e) {
             document.getElementById('state').textContent = 'Erreur de chargement: ' + e;
         }
     }
     // live preview
-    document.getElementById('image1').addEventListener('input', e => {
-        const url = e.target.value.trim();
-        const preview = document.getElementById('preview1');
-        preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 1">` : '';
-    });
-    document.getElementById('image2').addEventListener('input', e => {
-        const url = e.target.value.trim();
-        const preview = document.getElementById('preview2');
-        preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 2">` : '';
-    });
+    // document.getElementById('image1').addEventListener('input', e => {
+    //     const url = e.target.value.trim();
+    //     const preview = document.getElementById('preview1');
+    //     preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 1">` : '';
+    // });
+    // document.getElementById('image2').addEventListener('input', e => {
+    //     const url = e.target.value.trim();
+    //     const preview = document.getElementById('preview2');
+    //     preview.innerHTML = url ? `<img src="${url}" class="img-preview" alt="Preview 2">` : '';
+    // });
     document.getElementById('configForm').addEventListener('submit', async e => {
         e.preventDefault();
         const title = document.getElementById('title').value.trim();
         const char1 = document.getElementById('char1').value.trim();
-        const image1 = document.getElementById('image1').value.trim();
+        // const image1 = document.getElementById('image1').value.trim();
         const char2 = document.getElementById('char2').value.trim();
-        const image2 = document.getElementById('image2').value.trim();
+        // const image2 = document.getElementById('image2').value.trim();
         const vote_cooldown = document.getElementById('vote_cooldown').value.trim();
         const max_votes_per_user = document.getElementById('max_votes_per_user').value.trim();
-        const payload = {title, char1, image1, char2, image2};
+        const payload = {title, char1, char2};  // image1, image2 removed
         if (vote_cooldown !== '') payload.vote_cooldown = parseInt(vote_cooldown, 10);
         if (max_votes_per_user !== '') payload.max_votes_per_user = parseInt(max_votes_per_user, 10);
         try {
