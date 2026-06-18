@@ -222,6 +222,7 @@ ADMIN_PAGE = '''<!doctype html>
             <label for="max_votes_per_user">Nombre maximum de votes par utilisateur (0 = illimité) :</label>
             <input type="number" id="max_votes_per_user" name="max_votes_per_user" min="0" value="0">
             <div class="small">0 = illimité</div>
+            <button type="submit" style="margin-top:15px; padding:10px 20px; background:#ffd700; color:#0d0d0d; border:none; cursor:pointer;">Sauvegarder la configuration</button>
         </form>
     </div>
     <div class="section">
