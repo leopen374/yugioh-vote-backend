@@ -437,7 +437,7 @@ ADMIN_PAGE = '''<!doctype html>
 def admin():
     return render_template_string(ADMIN_PAGE)
 
- @app.route('/heartbeat-status')
+@app.route('/heartbeat-status')
 def heartbeat_status():
     return jsonify({"active": HEARTBEAT_ACTIVE})
 
