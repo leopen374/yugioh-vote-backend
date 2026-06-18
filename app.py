@@ -9,6 +9,24 @@ CORS(app)  # enable CORS for all routes
 HEARTBEAT_ACTIVE = False
 
 VOTES_FILE = os.path.join(os.path.dirname(__file__), 'votes.json')
+
+# Heartbeat thread to keep backend alive
+import threading
+import time
+import urllib.request
+
+def heartbeat_thread():
+    global HEARTBEAT_ACTIVE
+    HEARTBEAT_ACTIVE = True
+    while True:
+        try:
+            urllib.request.urlopen('http://localhost:5000/counts', timeout=5)
+        except Exception:
+            pass
+        time.sleep(900)  # 15 minutes
+
+heartbeat_thread_instance = threading.Thread(target=heartbeat_thread, daemon=True)
+heartbeat_thread_instance.start()
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 IP_DATA_FILE = os.path.join(os.path.dirname(__file__), 'ip_data.json')
 
@@ -440,20 +458,4 @@ def admin():
 @app.route('/heartbeat-status')
 def heartbeat_status():
     return jsonify({"active": HEARTBEAT_ACTIVE})
-
-if __name__ == '__main__':
-    # Start heartbeat thread to keep backend alive
-    import threading, time, urllib.request
-    def heartbeat():
-        HEARTBEAT_ACTIVE = True
-        while True:
-            try:
-                urllib.request.urlopen('http://localhost:5000/counts', timeout=5)
-            except Exception:
-                pass
-            time.sleep(900)  # 15 minutes
-    thread = threading.Thread(target=heartbeat, daemon=True)
-    thread.start()
-    app.run(host='0.0.0.0', port=5000, debug=False)
-# Trigger redeploy
 
