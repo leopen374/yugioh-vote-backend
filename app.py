@@ -240,7 +240,12 @@ ADMIN_PAGE = '''<!doctype html>
         <h2>Actions</h2>
         <button id="resetBtn">Réinitialiser les votes</button>
         <button id="newVoteBtn">Lancer un nouveau vote</button>
+        <div class="section">
+        <h2>Heartbeat (keep‑alive)</h2>
+        <button id="heartbeatBtn">Activer le heartbeat maintenant</button>
+        <div id="heartbeatStatus" class="status">Statut : inactif</div>
     </div>
+</div>
     <div class="section">
         <h2>État actuel</h2>
         <pre id="state">Chargement...</pre>
@@ -359,6 +364,27 @@ ADMIN_PAGE = '''<!doctype html>
     });
     
     loadState();
+
+    document.getElementById('heartbeatBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('heartbeatBtn');
+        const statusDiv = document.getElementById('heartbeatStatus');
+        btn.disabled = true;
+        btn.textContent = 'Activation…';
+        try {
+            const resp = await fetch(`${API}/counts`);
+            if (!resp.ok) throw new Error('Erreur serveur');
+            statusDiv.textContent = 'Statut : heartbeat activé (ping réussi)';
+            statusDiv.className = 'status closed';
+            alert('Heartbeat déclenché avec succès');
+        } catch (err) {
+            statusDiv.textContent = 'Statut : erreur';
+            statusDiv.className = 'status open';
+            alert('Erreur: ' + err);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Activer le heartbeat maintenant';
+        }
+    });
 </script>
 </body>
 </html>'''
