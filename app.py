@@ -6,27 +6,35 @@ import time
 
 app = Flask(__name__)
 CORS(app)  # enable CORS for all routes
+HEARTBEAT_RUNNING = False
 HEARTBEAT_ACTIVE = False
 
-VOTES_FILE = os.path.join(os.path.dirname(__file__), 'votes.json')
-
-# Heartbeat thread to keep backend alive
-import threading
-import time
-import urllib.request
-
+# Heartbeat thread function
 def heartbeat_thread():
-    global HEARTBEAT_ACTIVE
-    HEARTBEAT_ACTIVE = True
-    while True:
+    global HEARTBEAT_RUNNING, HEARTBEAT_ACTIVE
+    while HEARTBEAT_RUNNING:
         try:
             urllib.request.urlopen('http://localhost:5000/counts', timeout=5)
         except Exception:
             pass
         time.sleep(900)  # 15 minutes
 
-heartbeat_thread_instance = threading.Thread(target=heartbeat_thread, daemon=True)
-heartbeat_thread_instance.start()
+# Start heartbeat thread if not already running
+def start_heartbeat_thread():
+    global HEARTBEAT_RUNNING, HEARTBEAT_ACTIVE
+    if not HEARTBEAT_RUNNING:
+        HEARTBEAT_RUNNING = True
+        HEARTBEAT_ACTIVE = True
+        thread = threading.Thread(target=heartbeat_thread, daemon=True)
+        thread.start()
+
+# Stop heartbeat thread
+def stop_heartbeat_thread():
+    global HEARTBEAT_RUNNING, HEARTBEAT_ACTIVE
+    HEARTBEAT_RUNNING = False
+    HEARTBEAT_ACTIVE = False
+VOTES_FILE = os.path.join(os.path.dirname(__file__), 'votes.json')
+
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 IP_DATA_FILE = os.path.join(os.path.dirname(__file__), 'ip_data.json')
 
@@ -432,18 +440,25 @@ ADMIN_PAGE = '''<!doctype html>
     setInterval(updateHeartbeatStatus, 30000);
     // Optional: keep existing heartbeatBtn click to trigger a manual ping
     heartbeatBtn.addEventListener('click', async () => {
-        const btn = heartbeatBtn;
-        btn.disabled = true;
-        btn.textContent = 'Ping…';
         try {
-            const resp = await fetch(`${API}/counts`);
-            if (!resp.ok) throw new Error('Erreur serveur');
-            alert('Heartbeat déclenché avec succès');
+            const resp = await fetch(`${API}/heartbeat-toggle`, {method: 'POST'});
+            if (!resp.ok) throw new Error('Network response was not ok');
+            const data = await resp.json();
+            // UI will be updated by the periodic status poll; we can also update immediately
+            const btn = document.getElementById('heartbeatBtn');
+            const statusDiv = document.getElementById('heartbeatStatus');
+            if (data.active) {
+                btn.textContent = 'Désactiver le heartbeat';
+                statusDiv.textContent = 'Statut : heartbeat actif (ping réussi)';
+                statusDiv.className = 'status closed';
+            } else {
+                btn.textContent = 'Activer le heartbeat maintenant';
+                statusDiv.textContent = 'Statut : heartbeat inactif';
+                statusDiv.className = 'status open';
+            }
         } catch (err) {
+            console.error(err);
             alert('Erreur: ' + err);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Activer le heartbeat maintenant';
         }
     });
 
@@ -456,6 +471,16 @@ def admin():
     return render_template_string(ADMIN_PAGE)
 
 @app.route('/heartbeat-status')
+
+@app.route('/heartbeat-toggle', methods=['POST'])
+def heartbeat_toggle():
+    global HEARTBEAT_RUNNING, HEARTBEAT_ACTIVE
+    if HEARTBEAT_RUNNING:
+        stop_heartbeat_thread()
+    else:
+        start_heartbeat_thread()
+    return jsonify({"active": HEARTBEAT_ACTIVE})
+
 def heartbeat_status():
     return jsonify({"active": HEARTBEAT_ACTIVE})
 
