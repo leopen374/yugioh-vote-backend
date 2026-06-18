@@ -6,6 +6,7 @@ import time
 
 app = Flask(__name__)
 CORS(app)  # enable CORS for all routes
+HEARTBEAT_ACTIVE = False
 
 VOTES_FILE = os.path.join(os.path.dirname(__file__), 'votes.json')
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
@@ -385,6 +386,49 @@ ADMIN_PAGE = '''<!doctype html>
             btn.textContent = 'Activer le heartbeat maintenant';
         }
     });
+
+    // Heartbeat status polling
+    const heartbeatBtn = document.getElementById('heartbeatBtn');
+    const heartbeatStatus = document.getElementById('heartbeatStatus');
+    async function updateHeartbeatStatus() {
+        try {
+            const resp = await fetch(`${API}/heartbeat-status`);
+            if (!resp.ok) throw new Error('Failed to fetch heartbeat status');
+            const data = await resp.json();
+            if (data.active) {
+                heartbeatStatus.textContent = 'Statut : heartbeat actif (ping réussi)';
+                heartbeatStatus.className = 'status closed';
+            } else {
+                heartbeatStatus.textContent = 'Statut : heartbeat inactif';
+                heartbeatStatus.className = 'status open';
+            }
+        } catch (err) {
+            heartbeatStatus.textContent = 'Statut : erreur';
+            heartbeatStatus.className = 'status open';
+            console.error(err);
+        }
+    }
+    // Initial load
+    updateHeartbeatStatus();
+    // Refresh every 30 seconds
+    setInterval(updateHeartbeatStatus, 30000);
+    // Optional: keep existing heartbeatBtn click to trigger a manual ping
+    heartbeatBtn.addEventListener('click', async () => {
+        const btn = heartbeatBtn;
+        btn.disabled = true;
+        btn.textContent = 'Ping…';
+        try {
+            const resp = await fetch(`${API}/counts`);
+            if (!resp.ok) throw new Error('Erreur serveur');
+            alert('Heartbeat déclenché avec succès');
+        } catch (err) {
+            alert('Erreur: ' + err);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Activer le heartbeat maintenant';
+        }
+    });
+
 </script>
 </body>
 </html>'''
@@ -393,10 +437,15 @@ ADMIN_PAGE = '''<!doctype html>
 def admin():
     return render_template_string(ADMIN_PAGE)
 
+@app.route(\'/heartbeat-status\')
+def heartbeat_status():
+    return jsonify({\"active\": HEARTBEAT_ACTIVE})
+
 if __name__ == '__main__':
     # Start heartbeat thread to keep backend alive
     import threading, time, urllib.request
     def heartbeat():
+        HEARTBEAT_ACTIVE = True
         while True:
             try:
                 urllib.request.urlopen('http://localhost:5000/counts', timeout=5)
