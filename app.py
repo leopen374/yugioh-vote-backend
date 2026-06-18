@@ -424,4 +424,15 @@ def admin():
     return render_template_string(ADMIN_PAGE)
 
 if __name__ == '__main__':
+    # Start heartbeat thread
+    import threading, time, urllib.request
+    def heartbeat():
+        while True:
+            try:
+                urllib.request.urlopen('http://localhost:5000/counts', timeout=5)
+            except Exception:
+                pass
+            time.sleep(900)  # 15 minutes
+    thread = threading.Thread(target=heartbeat, daemon=True)
+    thread.start()
     app.run(host='0.0.0.0', port=5000, debug=False)
