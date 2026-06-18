@@ -240,7 +240,14 @@ ADMIN_PAGE = '''<!doctype html>
         <button id="resetBtn">Réinitialiser les votes</button>
         <button id="newVoteBtn">Lancer un nouveau vote</button>
     </div>
-    <div class="section">
+        <div class="section">
+        <h2>Keep Alive (ping backend)</h2>
+        <label for="keepAliveToggle">Activer le ping toutes les 12 min pour garder le backend actif</label>
+        <br>
+        <input type="checkbox" id="keepAliveToggle">
+        <span id="keepAliveStatus" style="margin-left:10px; font-size:0.9em;"></span>
+    </div>
+<div class="section">
         <h2>État actuel</h2>
         <pre id="state">Chargement...</pre>
     </div>
@@ -358,7 +365,57 @@ ADMIN_PAGE = '''<!doctype html>
     });
     
     loadState();
-</script>
+
+    // Keep alive functionality
+    const keepAliveToggle = document.getElementById('keepAliveToggle');
+    const keepAliveStatus = document.getElementById('keepAliveStatus');
+    let keepAliveInterval = null;
+    const API = window.location.origin;
+    
+    function startKeepAlive() {
+        if (keepAliveInterval) return;
+        keepAliveInterval = setInterval(() => {
+            fetch(`${API}/counts`).then(() => {
+                keepAliveStatus.textContent = '(actif)';\n                keepAliveStatus.style.color = '#ffeb3b;';
+            }).catch(() => {
+                keepAliveStatus.textContent = '(échec)';\n                keepAliveStatus.style.color = '#f44336;';
+            });
+        }, 12 * 60 * 1000); // 12 minutes
+        // immediate first call
+        fetch(`${API}/counts`).then(() => {
+            keepAliveStatus.textContent = '(actif)';\n            keepAliveStatus.style.color = '#ffeb3b;';
+        }).catch(() => {
+            keepAliveStatus.textContent = '(échec)';\n            keepAliveStatus.style.color = '#f44336;';
+        });
+        keepAliveStatus.textContent = '(démarrage)';\n        keepAliveStatus.style.color = '#ffeb3b;';
+    }
+    
+    function stopKeepAlive() {
+        if (keepAliveInterval) {
+            clearInterval(keepAliveInterval);
+            keepAliveInterval = null;
+        }
+        keepAliveStatus.textContent = '(arrêté)';\n        keepAliveStatus.style.color = '#aaa;';
+    }
+    
+    // Load from localStorage
+    const stored = localStorage.getItem('keepAliveEnabled');
+    if (stored === 'true') {
+        keepAliveToggle.checked = true;
+        startKeepAlive();
+    }
+    
+    keepAliveToggle.addEventListener('change', () => {
+        if (keepAliveToggle.checked) {
+            localStorage.setItem('keepAliveEnabled', 'true');
+            startKeepAlive();
+        } else {
+            localStorage.removeItem('keepAliveEnabled');
+            stopKeepAlive();
+        }
+    });
+
+
 </body>
 </html>'''
 
